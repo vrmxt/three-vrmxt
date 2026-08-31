@@ -17,6 +17,7 @@ const _vel = new THREE.Vector3();
 const _dummy = new THREE.Object3D();
 const _camQuat = new THREE.Quaternion();
 const _parentQuat = new THREE.Quaternion();
+const _parentInverse = new THREE.Matrix4();
 
 function spriteQuadGeometry(): THREE.PlaneGeometry {
   const geometry = new THREE.PlaneGeometry(1, 1);
@@ -36,6 +37,7 @@ function emitterObjectName(emitter: SpriteParticleEmitter, index: number): strin
 export class SpriteParticleEmitterRuntime {
   public readonly mesh: THREE.InstancedMesh;
   private readonly node: THREE.Object3D;
+  private readonly parent: THREE.Object3D;
   private readonly slots: Slot[];
   private readonly width: number;
   private readonly height: number;
@@ -52,6 +54,7 @@ export class SpriteParticleEmitterRuntime {
     index: number,
   ) {
     this.node = node;
+    this.parent = parent;
     this.width = emitter.size[0];
     this.height = emitter.size[1];
     this.emissionRate = emitter.emissionRate;
@@ -123,9 +126,10 @@ export class SpriteParticleEmitterRuntime {
     const cam = camera;
     cam.updateMatrixWorld();
     cam.getWorldQuaternion(_camQuat);
-    this.mesh.updateWorldMatrix(true, false);
-    this.mesh.getWorldQuaternion(_parentQuat);
+    this.parent.updateWorldMatrix(true, false);
+    this.parent.getWorldQuaternion(_parentQuat);
     _parentQuat.invert();
+    _parentInverse.copy(this.parent.matrixWorld).invert();
     let dirty = false;
     for (let i = 0; i < this.slots.length; i++) {
       const slot = this.slots[i]!;
@@ -143,7 +147,7 @@ export class SpriteParticleEmitterRuntime {
       slot.y += slot.vy * dt;
       slot.z += slot.vz * dt;
       _dummy.position.set(slot.x, slot.y, slot.z);
-      this.mesh.worldToLocal(_dummy.position);
+      _dummy.position.applyMatrix4(_parentInverse);
       _dummy.quaternion.copy(_camQuat).premultiply(_parentQuat);
       _dummy.scale.set(this.width, this.height, 1);
       _dummy.updateMatrix();
