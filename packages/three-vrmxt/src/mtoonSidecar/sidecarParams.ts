@@ -111,3 +111,20 @@ export function sidecarEntryToFlat(entry: SidecarMaterial): FlatMtoonParams {
 export function shouldGenerateOutline(flat: Pick<FlatMtoonParams, 'outlineWidthMode' | 'outlineWidthFactor'>): boolean {
   return flat.outlineWidthMode !== 'none' && flat.outlineWidthFactor > 0;
 }
+
+/** glTF image names often drop `.png`; sidecar dump keeps the datablock basename. */
+export function textureLookupKeys(name: string): string[] {
+  const trimmed = name.trim();
+  if (!trimmed) return [];
+  const keys = [trimmed];
+  const lower = trimmed.toLowerCase();
+  if (lower !== trimmed) keys.push(lower);
+  const dot = trimmed.lastIndexOf('.');
+  if (dot > 0) {
+    const stem = trimmed.slice(0, dot);
+    keys.push(stem, stem.toLowerCase());
+  } else {
+    keys.push(`${trimmed}.png`, `${trimmed}.jpg`, `${lower}.png`);
+  }
+  return [...new Set(keys)];
+}

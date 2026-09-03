@@ -2,7 +2,7 @@ export { VRMXTLoaderPlugin, tryAttach, applyMtoonxtStencil } from './VRMXTLoader
 export type { MtoonxtAttachResult, VrmxtAttachResult } from './tryAttach.js';
 export { applyMtoonSidecar } from './mtoonSidecar/applyMtoonSidecar.js';
 export type { ApplyMtoonSidecarResult } from './mtoonSidecar/applyMtoonSidecar.js';
-export { sidecarEntryToFlat, shouldGenerateOutline, MTOON_SIDECAR_KIND } from './mtoonSidecar/sidecarParams.js';
+export { sidecarEntryToFlat, shouldGenerateOutline, textureLookupKeys, MTOON_SIDECAR_KIND } from './mtoonSidecar/sidecarParams.js';
 export type { MtoonSidecarDocument, SidecarMaterial } from './mtoonSidecar/sidecarParams.js';
 export { resetMtoonxtStencil } from './mtoonxt/resetMtoonxtStencil.js';
 export {

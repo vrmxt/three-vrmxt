@@ -2,13 +2,31 @@ import * as THREE from 'three';
 import { MToonMaterial } from '@pixiv/three-vrm-materials-mtoon';
 import type { MToonMaterialOutlineWidthMode } from '@pixiv/three-vrm-materials-mtoon';
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { sidecarEntryToFlat, shouldGenerateOutline, type MtoonSidecarDocument } from './sidecarParams.js';
+import { sidecarEntryToFlat, shouldGenerateOutline, textureLookupKeys, type MtoonSidecarDocument } from './sidecarParams.js';
+
+export const MTOON_SIDECAR_PACK_PREFIX = 'MToonSidecarPack';
 
 export type ApplyMtoonSidecarResult = {
   applied: number;
   skipped: number;
   missing: string[];
 };
+
+const MAP_KEYS = [
+  'map',
+  'normalMap',
+  'emissiveMap',
+  'roughnessMap',
+  'metalnessMap',
+  'aoMap',
+  'alphaMap',
+] as const;
+
+function rememberTexture(map: Map<string, THREE.Texture>, key: string, tex: THREE.Texture): void {
+  for (const alias of textureLookupKeys(key)) {
+    if (!map.has(alias)) map.set(alias, tex);
+  }
+}
 
 function collectTextures(root: THREE.Object3D): Map<string, THREE.Texture> {
   const map = new Map<string, THREE.Texture>();
@@ -17,17 +35,34 @@ function collectTextures(root: THREE.Object3D): Map<string, THREE.Texture> {
     const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
     for (const mat of mats) {
       if (!mat || typeof mat !== 'object') continue;
-      for (const key of ['map', 'normalMap', 'emissiveMap'] as const) {
+      for (const key of MAP_KEYS) {
         const tex = (mat as THREE.MeshStandardMaterial)[key];
         if (tex instanceof THREE.Texture) {
-          if (tex.name) map.set(tex.name, tex);
+          if (tex.name) rememberTexture(map, tex.name, tex);
           const img = tex.image as { name?: string } | undefined;
-          if (img?.name) map.set(img.name, tex);
+          if (img?.name) rememberTexture(map, img.name, tex);
         }
       }
     }
   });
   return map;
+}
+
+function pickTexture(textures: Map<string, THREE.Texture>, name?: string): THREE.Texture | null {
+  if (!name) return null;
+  for (const key of textureLookupKeys(name)) {
+    const hit = textures.get(key);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+function removePackDummies(root: THREE.Object3D): void {
+  const dump: THREE.Object3D[] = [];
+  root.traverse((obj) => {
+    if (obj.name.startsWith(MTOON_SIDECAR_PACK_PREFIX)) dump.push(obj);
+  });
+  for (const obj of dump) obj.removeFromParent();
 }
 
 function c(rgb: [number, number, number]): THREE.Color {
@@ -40,7 +75,7 @@ function makeMtoon(
   textures: Map<string, THREE.Texture>,
 ): MToonMaterial {
   const flat = sidecarEntryToFlat(entry);
-  const pick = (n?: string) => (n ? (textures.get(n) ?? null) : null);
+  const pick = (n?: string) => pickTexture(textures, n);
   const mtoon = new MToonMaterial({
     color: c(flat.color),
     emissive: c(flat.emissive),
@@ -99,6 +134,7 @@ function attachWithOutline(mesh: THREE.Mesh, surface: MToonMaterial): void {
 export function applyMtoonSidecar(gltf: GLTF, sidecar: MtoonSidecarDocument): ApplyMtoonSidecarResult {
   const catalog = sidecar.materials ?? {};
   const textures = collectTextures(gltf.scene);
+  removePackDummies(gltf.scene);
   const missing: string[] = [];
   let applied = 0;
   let skipped = 0;

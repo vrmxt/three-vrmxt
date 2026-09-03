@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sidecarEntryToFlat, shouldGenerateOutline } from '../src/mtoonSidecar/sidecarParams.js';
+import { sidecarEntryToFlat, shouldGenerateOutline, textureLookupKeys } from '../src/mtoonSidecar/sidecarParams.js';
 
 describe('sidecarEntryToFlat', () => {
   it('maps glow-like entry', () => {
@@ -27,5 +27,14 @@ describe('sidecarEntryToFlat', () => {
       mtoon: { outlineWidthMode: 'screenCoordinates', outlineWidthFactor: 0.0015 },
     });
     expect(shouldGenerateOutline(flat)).toBe(true);
+  });
+});
+
+describe('textureLookupKeys', () => {
+  it('aliases png datablock names with glTF stems', () => {
+    expect(textureLookupKeys('blue.png')).toEqual(expect.arrayContaining(['blue.png', 'blue']));
+    expect(textureLookupKeys('mtoon_matcap_highlight')).toEqual(
+      expect.arrayContaining(['mtoon_matcap_highlight', 'mtoon_matcap_highlight.png']),
+    );
   });
 });
