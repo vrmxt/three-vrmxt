@@ -22,10 +22,12 @@
   },
   "peerDependencies": {
     "@pixiv/three-vrm": "^3.4.0",
+    "@pixiv/three-vrm-materials-mtoon": "^3.4.0",
     "three": ">=0.167.0"
   },
   "devDependencies": {
     "@pixiv/three-vrm": "^3.4.2",
+    "@pixiv/three-vrm-materials-mtoon": "^3.4.2",
     "@types/three": "^0.185.4",
     "three": "^0.185.1",
     "typescript": "^5.7.2",

@@ -25,4 +25,19 @@ v1 applies body/outline stencil extras and `VRMXT_sprite_particle` (instanced
 camera-facing quads). `apps/viewer` can edit stencil extras and download a GLB.
 Face SDF is later.
 
-Peers: `three`, `@pixiv/three-vrm`.
+## Non-humanoid GLB + MToon sidecar
+
+Do **not** use `VRMLoaderPlugin` for props. Pair Blender skill `gltf-mtoon-sidecar`
+(`mtoon.json`) with:
+
+```js
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { applyMtoonSidecar } from '@vrmxt/three-vrmxt';
+
+const loader = new GLTFLoader();
+const gltf = await loader.loadAsync('prop.glb');
+const sidecar = await (await fetch('mtoon.json')).json();
+applyMtoonSidecar(gltf, sidecar);
+```
+
+Peers: `three`, `@pixiv/three-vrm` (pulls `@pixiv/three-vrm-materials-mtoon`).
