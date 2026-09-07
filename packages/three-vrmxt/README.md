@@ -21,9 +21,11 @@ Construct `WebGLRenderer` with `stencil: true` for `VRMXT_materials_mtoonxt` cov
 clip. Setting `renderer.stencil` after construct does not allocate the buffer
 (Three.js r163+).
 
-v1 applies body/outline stencil extras and `VRMXT_sprite_particle` (instanced
-camera-facing quads). `apps/viewer` can edit stencil extras and download a GLB.
-Face SDF is later.
+v1 applies the root MToonXT stencil graph
+(`extensions.VRMXT_materials_mtoonxt.stencil[]`) and `VRMXT_sprite_particle`
+(instanced camera-facing quads). Nested material `stencil` / `outlineStencil` ops
+are not read. `apps/viewer` can edit the root graph and download a GLB. Face SDF
+is later. `stencil-cube.vrm` may have no root graph until you re-export.
 
 ## Non-humanoid GLB + MToon sidecar
 

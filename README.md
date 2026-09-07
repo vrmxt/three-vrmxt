@@ -42,10 +42,12 @@ First enable: repo **Settings → Pages → Source: GitHub Actions**.
 Viewer boots with `apps/viewer/public/stencil-cube.vrm`: cube face writers
 (Y front/back → sphere, X left/right → cone, Z top/bottom → torus) plus
 `VRMXT_sprite_particle` emitters on hips, head, and hands. Drop another `.vrm`
-to replace it.
+to replace it. Nested ops on that sample are not read; add a root
+`extensions.VRMXT_materials_mtoonxt.stencil[]` graph in the viewer and re-export
+if you want GPU coverage clip from the sample.
 
-Hub browser extension is still planned. `apps/viewer` edits and exports MToonXT
-stencil (JSON patch). Sprite particles play on load; authoring stays in Blender.
+Hub browser extension is still planned. `apps/viewer` edits and exports the root
+MToonXT stencil graph (JSON patch). Sprite particles play on load; authoring stays in Blender.
 
 ## Specs
 

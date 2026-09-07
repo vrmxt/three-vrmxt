@@ -1,7 +1,6 @@
 import {
   createVrmxtViewer,
-  type StencilExtra,
-  type StencilMaterialRow,
+  type MtoonxtStencil,
   type ViewerLoadStage,
   type ViewerShadows,
   type ViewerStatus,
@@ -40,6 +39,7 @@ const shNbiasEl = document.querySelector('#sh-nbias') as HTMLInputElement;
 const shNbiasValEl = document.querySelector('#sh-nbias-val') as HTMLElement;
 const shMapEl = document.querySelector('#sh-map') as HTMLSelectElement;
 const stencilRootEl = document.querySelector('#stencil-root') as HTMLElement;
+const stencilAddEl = document.querySelector('#stencil-add') as HTMLButtonElement;
 const particleRootEl = document.querySelector('#particle-root') as HTMLElement;
 const particleAddEl = document.querySelector('#particle-add') as HTMLButtonElement;
 const downloadEl = document.querySelector('#download') as HTMLButtonElement;
@@ -217,7 +217,16 @@ shMapEl.addEventListener('change', () => {
 syncLightUi();
 vrmxtEnabledEl.checked = viewer.getVrmxtEnabled();
 
-const CLIP_OPS = new Set(['inside', 'insideOverlay', 'outside']);
+const DEPTH_TESTS = [
+  'never',
+  'less',
+  'equal',
+  'lessEqual',
+  'greater',
+  'notEqual',
+  'greaterEqual',
+  'always',
+];
 
 function escapeHtml(text: string): string {
   return text
@@ -227,63 +236,91 @@ function escapeHtml(text: string): string {
     .replace(/"/g, '&quot;');
 }
 
-function extraFromControls(
-  op: string,
-  writerChecks: NodeListOf<HTMLInputElement>,
-): StencilExtra | null {
-  if (!op || op === 'none') {
-    return null;
-  }
-  if (op === 'write' || op === 'same') {
-    return { op };
-  }
-  const materials = Array.from(writerChecks)
-    .filter((el) => el.checked)
-    .map((el) => Number(el.value));
-  return { op: op as StencilExtra['op'], materials };
+function depthOptions(current: string): string {
+  return DEPTH_TESTS.map((value) => {
+    const selected = value === current ? ' selected' : '';
+    return `<option value="${value}"${selected}>${value}</option>`;
+  }).join('');
 }
 
-function opOptions(kind: 'body' | 'outline', current: string): string {
-  const ops =
-    kind === 'body'
-      ? ['none', 'write', 'inside', 'insideOverlay', 'outside']
-      : ['none', 'same', 'write', 'inside', 'insideOverlay', 'outside'];
-  return ops
-    .map((op) => {
-      const label =
-        op === 'insideOverlay' ? 'inside overlay' : op === 'none' ? 'none' : op;
-      const selected = op === current ? ' selected' : '';
-      return `<option value="${op}"${selected}>${label}</option>`;
-    })
-    .join('');
-}
-
-function writerBoxes(
-  prefix: string,
-  row: StencilMaterialRow,
-  rows: StencilMaterialRow[],
-  selected: number[] | undefined,
-  visible: boolean,
+function materialBoxes(
+  role: 'writer' | 'reader',
+  selected: number[],
+  materials: { index: number; name: string; hasMtoon: boolean }[],
 ): string {
-  if (!visible) {
-    return '';
-  }
-  const boxes = rows
-    .filter((other) => other.hasMtoon && other.index !== row.index)
-    .map((other) => {
-      const checked = selected?.includes(other.index) ? ' checked' : '';
-      return `<label class="check"><input type="checkbox" data-role="${prefix}" value="${other.index}"${checked} /> ${escapeHtml(other.name)}</label>`;
+  const boxes = materials
+    .filter((row) => row.hasMtoon)
+    .map((row) => {
+      const checked = selected.includes(row.index) ? ' checked' : '';
+      return `<label class="check"><input type="checkbox" data-role="${role}" value="${row.index}"${checked} /> ${escapeHtml(row.name)}</label>`;
     })
     .join('');
-  return `<div class="writers"><span>Clip against writers</span>${boxes || '<span class="muted">No other MToon materials</span>'}</div>`;
+  return `<div class="writers"><span>${role === 'writer' ? 'Writers' : 'Readers'}</span>${boxes || '<span class="muted">No MToon materials</span>'}</div>`;
 }
 
-function openMaterialIndices(): Set<number> {
+function openStencilIndices(): Set<number> {
   const open = new Set<number>();
-  stencilRootEl.querySelectorAll('details[data-index][open]').forEach((el) => {
-    open.add(Number((el as HTMLElement).dataset.index));
+  stencilRootEl.querySelectorAll('details[data-stencil-index][open]').forEach((el) => {
+    open.add(Number((el as HTMLElement).dataset.stencilIndex));
   });
   return open;
+}
+
+function defaultStencil(
+  materials: { index: number; name: string; hasMtoon: boolean }[],
+): MtoonxtStencil | null {
+  const mtoon = materials.filter((row) => row.hasMtoon).map((row) => row.index);
+  if (mtoon.length < 2) {
+    return null;
+  }
+  return {
+    writers: [mtoon[0]],
+    readers: [mtoon[1]],
+    comparison: 'outside',
+    showWritersThroughOccluders: false,
+    writersOnlyInsideReaders: false,
+    writersOnlyOutsideReaders: false,
+    writersSelfOcclude: true,
+    ignoreOccludedReaderAreas: true,
+    writersWriteColor: true,
+    writersWriteDepth: true,
+    readersWriteDepth: true,
+    writerDepthTest: 'lessEqual',
+    readerDepthTest: 'lessEqual',
+  };
+}
+
+function stencilFromDetails(details: HTMLDetailsElement): MtoonxtStencil {
+  const writers = Array.from(details.querySelectorAll('[data-role="writer"]'))
+    .filter((el) => (el as HTMLInputElement).checked)
+    .map((el) => Number((el as HTMLInputElement).value));
+  const readers = Array.from(details.querySelectorAll('[data-role="reader"]'))
+    .filter((el) => (el as HTMLInputElement).checked)
+    .map((el) => Number((el as HTMLInputElement).value));
+  const comparison =
+    (details.querySelector('[data-role="comparison"]') as HTMLSelectElement | null)?.value ===
+    'inside'
+      ? 'inside'
+      : 'outside';
+  const checked = (role: string) =>
+    (details.querySelector(`[data-role="${role}"]`) as HTMLInputElement | null)?.checked === true;
+  const selectVal = (role: string, fallback: string) =>
+    (details.querySelector(`[data-role="${role}"]`) as HTMLSelectElement | null)?.value ?? fallback;
+  return {
+    writers,
+    readers,
+    comparison,
+    showWritersThroughOccluders: checked('show-through'),
+    writersOnlyInsideReaders: checked('inside-only'),
+    writersOnlyOutsideReaders: checked('outside-only'),
+    writersSelfOcclude: checked('self-occlude'),
+    ignoreOccludedReaderAreas: checked('ignore-occluded'),
+    writersWriteColor: checked('write-color'),
+    writersWriteDepth: checked('write-depth'),
+    readersWriteDepth: checked('readers-depth'),
+    writerDepthTest: selectVal('writer-depth', 'lessEqual'),
+    readerDepthTest: selectVal('reader-depth', 'lessEqual'),
+  };
 }
 
 function exportFileName(name: string): string {
@@ -458,64 +495,63 @@ function defaultParticleNode(): number {
 }
 
 function renderStencilPanel(): void {
-  const rows = viewer.getStencilMaterials();
+  const materials = viewer.getMtoonMaterials();
+  const rows = viewer.getStencils();
   syncDownload();
-  if (rows.length === 0) {
-    stencilRootEl.innerHTML = '<span class="muted">Load a VRM to edit stencil extras.</span>';
+  const canAdd = materials.filter((row) => row.hasMtoon).length >= 2;
+  stencilAddEl.disabled = viewer.getSourceName() === null || !canAdd;
+  if (viewer.getSourceName() === null) {
+    stencilRootEl.innerHTML = '<span class="muted">Load a VRM to edit stencil.</span>';
     return;
   }
-  const open = openMaterialIndices();
+  if (rows.length === 0) {
+    stencilRootEl.innerHTML = '<span class="muted">No stencils. Add one to author the root graph.</span>';
+    return;
+  }
+  const open = openStencilIndices();
   stencilRootEl.innerHTML = rows
-    .map((row) => {
-      const isOpen = open.has(row.index) ? ' open' : '';
-      if (!row.hasMtoon) {
-        return `<details data-index="${row.index}"${isOpen}><summary>${escapeHtml(row.name)}</summary><p class="muted">No VRMC_materials_mtoon sibling.</p></details>`;
-      }
-      const bodyOp = row.body?.op ?? 'none';
-      const outlineOp = row.outline?.op ?? 'none';
-      const warns: string[] = [];
-      if (row.bodyUnresolvable) {
-        warns.push('Body clip is not resolvable (needs body write writers).');
-      }
-      if (row.outlineUnresolvable) {
-        warns.push('Outline clip is not resolvable.');
-      }
-      return `<details data-index="${row.index}"${isOpen}>
-        <summary>${escapeHtml(row.name)}</summary>
+    .map((row, index) => {
+      const isOpen = open.has(index) ? ' open' : '';
+      const insideSel = row.comparison === 'inside' ? ' selected' : '';
+      const outsideSel = row.comparison === 'outside' ? ' selected' : '';
+      const check = (on: boolean) => (on ? ' checked' : '');
+      return `<details data-stencil-index="${index}"${isOpen}>
+        <summary>Stencil ${index + 1}</summary>
         <div class="panel">
-          <label>Body
-            <select data-role="body-op">${opOptions('body', bodyOp)}</select>
+          ${materialBoxes('writer', row.writers, materials)}
+          ${materialBoxes('reader', row.readers, materials)}
+          <label>Comparison
+            <select data-role="comparison">
+              <option value="inside"${insideSel}>Inside</option>
+              <option value="outside"${outsideSel}>Outside</option>
+            </select>
           </label>
-          ${writerBoxes('body-writer', row, rows, row.body?.materials, CLIP_OPS.has(bodyOp))}
-          <label>Outline
-            <select data-role="outline-op">${opOptions('outline', outlineOp)}</select>
+          <label class="check"><input type="checkbox" data-role="show-through"${check(row.showWritersThroughOccluders)} /> Show writers through occluders</label>
+          <label class="check"><input type="checkbox" data-role="inside-only"${check(row.writersOnlyInsideReaders)} /> Writers only inside readers</label>
+          <label class="check"><input type="checkbox" data-role="outside-only"${check(row.writersOnlyOutsideReaders)} /> Writers only outside readers</label>
+          <label class="check"><input type="checkbox" data-role="self-occlude"${check(row.writersSelfOcclude)} /> Writers self occlude</label>
+          <label class="check"><input type="checkbox" data-role="ignore-occluded"${check(row.ignoreOccludedReaderAreas)} /> Ignore occluded reader areas</label>
+          <label class="check"><input type="checkbox" data-role="write-color"${check(row.writersWriteColor)} /> Writers write color</label>
+          <label class="check"><input type="checkbox" data-role="write-depth"${check(row.writersWriteDepth)} /> Writers write depth</label>
+          <label class="check"><input type="checkbox" data-role="readers-depth"${check(row.readersWriteDepth)} /> Readers write depth</label>
+          <label>Writer depth test
+            <select data-role="writer-depth">${depthOptions(row.writerDepthTest)}</select>
           </label>
-          ${writerBoxes('outline-writer', row, rows, row.outline?.materials, CLIP_OPS.has(outlineOp))}
-          ${warns.map((w) => `<p class="warn">${w}</p>`).join('')}
+          <label>Reader depth test
+            <select data-role="reader-depth">${depthOptions(row.readerDepthTest)}</select>
+          </label>
+          <button type="button" data-role="s-remove">Remove stencil</button>
         </div>
       </details>`;
     })
     .join('');
 }
 
-async function commitMaterial(details: HTMLDetailsElement): Promise<void> {
-  const index = Number(details.dataset.index);
-  const bodyOp = (details.querySelector('[data-role="body-op"]') as HTMLSelectElement | null)
-    ?.value;
-  const outlineOp = (details.querySelector('[data-role="outline-op"]') as HTMLSelectElement | null)
-    ?.value;
-  if (!bodyOp || !outlineOp) {
-    return;
-  }
-  const body = extraFromControls(
-    bodyOp,
-    details.querySelectorAll('[data-role="body-writer"]'),
+async function commitStencils(): Promise<void> {
+  const next = Array.from(stencilRootEl.querySelectorAll('details[data-stencil-index]')).map(
+    (el) => stencilFromDetails(el as HTMLDetailsElement),
   );
-  const outline = extraFromControls(
-    outlineOp,
-    details.querySelectorAll('[data-role="outline-writer"]'),
-  );
-  const info = await viewer.setMaterialStencil(index, body, outline);
+  const info = await viewer.setStencils(next);
   if (info) {
     applyStatus(info);
   } else {
@@ -631,11 +667,74 @@ document.body.addEventListener('drop', (e) => {
 });
 
 stencilRootEl.addEventListener('change', (e) => {
-  const target = e.target as HTMLElement;
-  const details = target.closest('details[data-index]') as HTMLDetailsElement | null;
-  if (details) {
-    void commitMaterial(details);
+  const target = e.target as HTMLInputElement;
+  const details = target.closest('details[data-stencil-index]') as HTMLDetailsElement | null;
+  if (!details) {
+    return;
   }
+  if (target.dataset.role === 'inside-only' && target.checked) {
+    const other = details.querySelector('[data-role="outside-only"]') as HTMLInputElement | null;
+    if (other) {
+      other.checked = false;
+    }
+  }
+  if (target.dataset.role === 'outside-only' && target.checked) {
+    const other = details.querySelector('[data-role="inside-only"]') as HTMLInputElement | null;
+    if (other) {
+      other.checked = false;
+    }
+  }
+  if (target.dataset.role === 'writer' && target.checked) {
+    const reader = details.querySelector(
+      `[data-role="reader"][value="${target.value}"]`,
+    ) as HTMLInputElement | null;
+    if (reader) {
+      reader.checked = false;
+    }
+  }
+  if (target.dataset.role === 'reader' && target.checked) {
+    const writer = details.querySelector(
+      `[data-role="writer"][value="${target.value}"]`,
+    ) as HTMLInputElement | null;
+    if (writer) {
+      writer.checked = false;
+    }
+  }
+  void commitStencils();
+});
+
+stencilRootEl.addEventListener('click', (e) => {
+  const target = e.target as HTMLElement;
+  if (target.dataset.role !== 's-remove') {
+    return;
+  }
+  const details = target.closest('details[data-stencil-index]') as HTMLDetailsElement | null;
+  if (!details) {
+    return;
+  }
+  const index = Number(details.dataset.stencilIndex);
+  const next = viewer.getStencils().filter((_, i) => i !== index);
+  void (async () => {
+    const info = await viewer.setStencils(next);
+    if (info) {
+      applyStatus(info);
+    } else {
+      renderStencilPanel();
+    }
+  })();
+});
+
+stencilAddEl.addEventListener('click', () => {
+  const created = defaultStencil(viewer.getMtoonMaterials());
+  if (!created) {
+    return;
+  }
+  void (async () => {
+    const info = await viewer.setStencils([...viewer.getStencils(), created]);
+    if (info) {
+      applyStatus(info);
+    }
+  })();
 });
 
 particleRootEl.addEventListener('change', (e) => {

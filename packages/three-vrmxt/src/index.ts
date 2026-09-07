@@ -6,19 +6,33 @@ export { sidecarEntryToFlat, shouldGenerateOutline, textureLookupKeys, MTOON_SID
 export type { MtoonSidecarDocument, SidecarMaterial } from './mtoonSidecar/sidecarParams.js';
 export { resetMtoonxtStencil } from './mtoonxt/resetMtoonxtStencil.js';
 export {
-  assignStencilRefs,
-  type StencilExtra,
-  type StencilOpName,
+  acquireStencilRefBand,
+  gpuStencilRef,
+  releaseStencilRefBand,
 } from './mtoonxt/stencilRefs.js';
 export {
   EXT_MTOONXT,
+  MTOONXT_SPEC_VERSION,
   cloneJson,
   ensureMtoonxtUsed,
-  listStencilMaterials,
-  sanitizeMtoonxtStencils,
-  setMaterialStencilExtras,
+  materialHasSiblingMtoon,
+  parseRootStencils,
+  serializeRootStencils,
+  serializeStencil,
   type GltfJson,
-  type StencilMaterialRow,
+  type MtoonxtStencil,
+} from './mtoonxt/parseStencil.js';
+export {
+  CoverageMode,
+  compileStencils,
+  type StencilPass,
+  type StencilPlan,
+} from './mtoonxt/compileStencil.js';
+export {
+  listMtoonMaterials,
+  listStencils,
+  sanitizeMtoonxtStencils,
+  setStencils,
 } from './mtoonxt/editStencil.js';
 export { buildGlb, isGlb, parseGlb, type GlbParts } from './gltf/glbCodec.js';
 export { appendImageToGlbBin, sniffImageMime, type GlbJsonForPack } from './gltf/packImage.js';

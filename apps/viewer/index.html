@@ -106,6 +106,14 @@
         flex-direction: column;
         gap: 4px;
       }
+      #inspector .panel > label select {
+        width: 100%;
+        background: #333;
+        color: #eee;
+        border: 0;
+        border-radius: 4px;
+        padding: 4px 6px;
+      }
       #inspector .row-2 {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -422,7 +430,8 @@
       <details open>
         <summary>MToonXT stencil</summary>
         <div class="panel">
-          <div id="stencil-root" class="muted">Load a VRM to edit stencil extras.</div>
+          <div id="stencil-root" class="muted">Load a VRM to edit stencil.</div>
+          <button id="stencil-add" type="button">Add stencil</button>
         </div>
       </details>
     </aside>

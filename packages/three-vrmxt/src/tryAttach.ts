@@ -32,7 +32,7 @@ export async function tryAttach(gltf: GLTF): Promise<VrmxtAttachResult> {
     spriteParticles: null,
   };
 
-  if (used.includes('VRMXT_materials_mtoonxt') && json.materials) {
+  if (used.includes('VRMXT_materials_mtoonxt')) {
     const stats = await applyMtoonxtStencil(gltf);
     result.mtoonxtApplied = stats.applied;
     result.mtoonxtSkipped = stats.skipped;

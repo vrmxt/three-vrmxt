@@ -3,10 +3,12 @@ import { buildGlb, isGlb, parseGlb } from '../src/gltf/glbCodec.js';
 import {
   EXT_MTOONXT,
   cloneJson,
-  listStencilMaterials,
+  listMtoonMaterials,
+  listStencils,
   sanitizeMtoonxtStencils,
-  setMaterialStencilExtras,
+  setStencils,
   type GltfJson,
+  type MtoonxtStencil,
 } from '../src/mtoonxt/editStencil.js';
 
 function mtoonMat(name: string, extra?: unknown): unknown {
@@ -17,6 +19,27 @@ function mtoonMat(name: string, extra?: unknown): unknown {
     extensions.VRMXT_materials_mtoonxt = extra;
   }
   return { name, extensions };
+}
+
+function stencil(partial: Partial<MtoonxtStencil> & Pick<MtoonxtStencil, 'writers' | 'readers'>): MtoonxtStencil {
+  return {
+    comparison: 'outside',
+    showWritersThroughOccluders: false,
+    writersOnlyInsideReaders: false,
+    writersOnlyOutsideReaders: false,
+    writersSelfOcclude: true,
+    ignoreOccludedReaderAreas: true,
+    writersWriteColor: true,
+    writersWriteDepth: true,
+    readersWriteDepth: true,
+    writerDepthTest: 'lessEqual',
+    readerDepthTest: 'lessEqual',
+    ...partial,
+  };
+}
+
+function rootXt(json: GltfJson): Record<string, unknown> | undefined {
+  return json.extensions?.[EXT_MTOONXT] as Record<string, unknown> | undefined;
 }
 
 describe('glbCodec', () => {
@@ -45,51 +68,52 @@ describe('glbCodec', () => {
   });
 });
 
-describe('setMaterialStencilExtras', () => {
-  it('writes write + outside extras and extensionsUsed, never required', () => {
+describe('setStencils', () => {
+  it('writes root stencil and never nested ops or extensionsRequired', () => {
     const json: GltfJson = {
       materials: [mtoonMat('Face'), mtoonMat('Hair')],
     };
-    expect(setMaterialStencilExtras(json, 0, { op: 'write' }, null)).toBe(true);
     expect(
-      setMaterialStencilExtras(json, 1, { op: 'outside', materials: [0] }, { op: 'same' }),
+      setStencils(json, [
+        stencil({
+          writers: [1],
+          readers: [0],
+          showWritersThroughOccluders: true,
+        }),
+      ]),
     ).toBe(true);
     expect(json.extensionsUsed).toEqual([EXT_MTOONXT]);
     expect(json.extensionsRequired).toBeUndefined();
-    const face = json.materials![0] as {
-      extensions: { VRMXT_materials_mtoonxt: Record<string, unknown> };
-    };
-    expect(face.extensions.VRMXT_materials_mtoonxt).toEqual({
+    expect(rootXt(json)).toEqual({
       specVersion: '1.0',
-      stencil: { op: 'write' },
+      stencil: [
+        {
+          writers: [1],
+          readers: [0],
+          showWritersThroughOccluders: true,
+        },
+      ],
     });
-    const hair = json.materials![1] as {
-      extensions: { VRMXT_materials_mtoonxt: Record<string, unknown> };
+    const face = json.materials![0] as { extensions: Record<string, unknown> };
+    const hair = json.materials![1] as { extensions: Record<string, unknown> };
+    expect(face.extensions.VRMXT_materials_mtoonxt).toBeUndefined();
+    expect(hair.extensions.VRMXT_materials_mtoonxt).toBeUndefined();
+    expect(listStencils(json)).toHaveLength(1);
+  });
+
+  it('clears the graph and extensionsUsed', () => {
+    const json: GltfJson = {
+      materials: [mtoonMat('Face'), mtoonMat('Hair')],
     };
-    expect(hair.extensions.VRMXT_materials_mtoonxt.stencil).toEqual({
-      op: 'outside',
-      materials: [0],
-    });
-    expect(hair.extensions.VRMXT_materials_mtoonxt.outlineStencil).toEqual({ op: 'same' });
-  });
-
-  it('rejects materials without sibling MToon', () => {
-    const json: GltfJson = { materials: [{ name: 'PBR' }] };
-    expect(setMaterialStencilExtras(json, 0, { op: 'write' }, null)).toBe(false);
-  });
-
-  it('omits the extension when both extras are cleared', () => {
-    const json: GltfJson = { materials: [mtoonMat('Face')] };
-    setMaterialStencilExtras(json, 0, { op: 'write' }, null);
-    setMaterialStencilExtras(json, 0, null, null);
-    const def = json.materials![0] as { extensions: Record<string, unknown> };
-    expect(def.extensions.VRMXT_materials_mtoonxt).toBeUndefined();
+    setStencils(json, [stencil({ writers: [1], readers: [0] })]);
+    expect(setStencils(json, [])).toBe(true);
+    expect(rootXt(json)).toBeUndefined();
     expect(json.extensionsUsed).toBeUndefined();
   });
 });
 
 describe('sanitizeMtoonxtStencils', () => {
-  it('drops clip listing a non-write writer', () => {
+  it('strips leftover nested ops', () => {
     const json: GltfJson = {
       extensionsUsed: [EXT_MTOONXT],
       materials: [
@@ -98,25 +122,23 @@ describe('sanitizeMtoonxtStencils', () => {
       ],
     };
     const clone = cloneJson(json);
-    clone.materials![1] = mtoonMat('B');
     sanitizeMtoonxtStencils(clone);
     const a = clone.materials![0] as { extensions: Record<string, unknown> };
+    const b = clone.materials![1] as { extensions: Record<string, unknown> };
     expect(a.extensions.VRMXT_materials_mtoonxt).toBeUndefined();
+    expect(b.extensions.VRMXT_materials_mtoonxt).toBeUndefined();
     expect(clone.extensionsUsed).toBeUndefined();
   });
 });
 
-describe('listStencilMaterials', () => {
-  it('flags unresolvable clip while keeping the extra', () => {
+describe('listMtoonMaterials', () => {
+  it('reports sibling MToon without nested stencil extras', () => {
     const json: GltfJson = {
-      materials: [
-        mtoonMat('Face', { specVersion: '1.0', stencil: { op: 'write' } }),
-        mtoonMat('Hair', { specVersion: '1.0', stencil: { op: 'outside', materials: [1] } }),
-      ],
+      materials: [mtoonMat('Face'), { name: 'PBR' }],
     };
-    const rows = listStencilMaterials(json);
-    expect(rows[0].bodyUnresolvable).toBe(false);
-    expect(rows[1].bodyUnresolvable).toBe(true);
-    expect(rows[1].body).toEqual({ op: 'outside', materials: [1] });
+    expect(listMtoonMaterials(json)).toEqual([
+      { index: 0, name: 'Face', hasMtoon: true },
+      { index: 1, name: 'PBR', hasMtoon: false },
+    ]);
   });
 });

@@ -11,14 +11,15 @@ import {
   cloneJson,
   listGltfNodes,
   listGltfTextures,
+  listMtoonMaterials,
   listSpriteParticleEmitters,
-  listStencilMaterials,
+  listStencils,
   parseGlb,
   removeSpriteParticleEmitter,
   resetMtoonxtStencil,
   sanitizeMtoonxtStencils,
   sanitizeSpriteParticles,
-  setMaterialStencilExtras,
+  setStencils as writeGltfStencils,
   setSpriteParticleEmitter,
   sniffImageMime,
   tryAttach,
@@ -30,13 +31,12 @@ import {
   type ParticleGltfJson,
   type SpriteParticlePatch,
   type SpriteParticleRow,
-  type StencilExtra,
-  type StencilMaterialRow,
+  type MtoonxtStencil,
   type VrmxtAttachResult,
   type VrmxtSpriteParticleManager,
 } from '@vrmxt/three-vrmxt';
 
-export type { StencilExtra, StencilMaterialRow, SpriteParticleRow, GltfNodeOption, GltfTextureOption };
+export type { MtoonxtStencil, SpriteParticleRow, GltfNodeOption, GltfTextureOption };
 
 export type ViewerStatus = {
   name: string;
@@ -91,12 +91,9 @@ export type VrmxtViewer = {
   resetView: () => void;
   getShadows: () => ViewerShadows;
   setShadows: (next: Partial<ViewerShadows>) => ViewerShadows;
-  getStencilMaterials: () => StencilMaterialRow[];
-  setMaterialStencil: (
-    index: number,
-    body: StencilExtra | null,
-    outline: StencilExtra | null,
-  ) => Promise<ViewerStatus | null>;
+  getStencils: () => MtoonxtStencil[];
+  getMtoonMaterials: () => { index: number; name: string; hasMtoon: boolean }[];
+  setStencils: (stencils: MtoonxtStencil[]) => Promise<ViewerStatus | null>;
   getGltfNodes: () => GltfNodeOption[];
   getGltfTextures: () => GltfTextureOption[];
   getSpriteParticleEmitters: () => SpriteParticleRow[];
@@ -497,6 +494,7 @@ export function createVrmxtViewer(canvas: HTMLCanvasElement): VrmxtViewer {
     }
 
     const old = current;
+    const oldGltf = currentGltf;
     const oldParticles = spriteParticles;
     scene.add(root);
     current = root;
@@ -508,6 +506,9 @@ export function createVrmxtViewer(canvas: HTMLCanvasElement): VrmxtViewer {
 
     if (old) {
       oldParticles?.dispose();
+      if (oldGltf) {
+        resetMtoonxtStencil(oldGltf);
+      }
       scene.remove(old);
       VRMUtils.deepDispose(old);
     }
@@ -606,12 +607,20 @@ export function createVrmxtViewer(canvas: HTMLCanvasElement): VrmxtViewer {
     lastSource.bytes = buildGlb(currentGltf.parser.json, glbBin);
   }
 
-  function getStencilMaterials(): StencilMaterialRow[] {
+  function getStencils(): MtoonxtStencil[] {
     const json = gltfJson();
     if (!json) {
       return [];
     }
-    return listStencilMaterials(json);
+    return listStencils(json);
+  }
+
+  function getMtoonMaterials(): { index: number; name: string; hasMtoon: boolean }[] {
+    const json = gltfJson();
+    if (!json) {
+      return [];
+    }
+    return listMtoonMaterials(json);
   }
 
   async function reapplyXt(name: string): Promise<ViewerStatus | null> {
@@ -629,16 +638,12 @@ export function createVrmxtViewer(canvas: HTMLCanvasElement): VrmxtViewer {
     return attachStatus(name, vrmxtEnabled, xt);
   }
 
-  async function setMaterialStencil(
-    index: number,
-    body: StencilExtra | null,
-    outline: StencilExtra | null,
-  ): Promise<ViewerStatus | null> {
+  async function setStencils(stencils: MtoonxtStencil[]): Promise<ViewerStatus | null> {
     const json = gltfJson();
     if (!json || !lastSource) {
       return null;
     }
-    if (!setMaterialStencilExtras(json, index, body, outline)) {
+    if (!writeGltfStencils(json, stencils)) {
       return null;
     }
     syncSourceBytes();
@@ -769,6 +774,9 @@ export function createVrmxtViewer(canvas: HTMLCanvasElement): VrmxtViewer {
   function dispose(): void {
     spriteParticles?.dispose();
     spriteParticles = null;
+    if (currentGltf) {
+      resetMtoonxtStencil(currentGltf);
+    }
     renderer.setAnimationLoop(null);
     window.removeEventListener('resize', resize);
     viewHelperHost.removeEventListener('pointerdown', onHelperPointerDown);
@@ -794,8 +802,9 @@ export function createVrmxtViewer(canvas: HTMLCanvasElement): VrmxtViewer {
     resetView,
     getShadows,
     setShadows,
-    getStencilMaterials,
-    setMaterialStencil,
+    getStencils,
+    getMtoonMaterials,
+    setStencils,
     getGltfNodes,
     getGltfTextures,
     getSpriteParticleEmitters,

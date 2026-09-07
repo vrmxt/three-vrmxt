@@ -1,11 +1,27 @@
 import * as THREE from 'three';
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { releaseStencilRefBand } from './stencilRefs.js';
 
 const DEPTH_SNAP = 'vrmxtDepthSnap';
 const STENCIL_MARK = 'vrmxtStencilApplied';
 const ORDER_SNAP = 'vrmxtRenderOrderSnap';
+export const STENCIL_HELPER = 'vrmxtStencilHelper';
+export const STENCIL_INSTANCE_ID = 'vrmxtStencilInstanceId';
 
-type DepthSnap = { depthFunc: THREE.DepthModes; depthWrite: boolean };
+type StencilSnap = {
+  depthFunc: THREE.DepthModes;
+  depthWrite: boolean;
+  stencilWrite: boolean;
+  stencilFunc: THREE.StencilFunc;
+  stencilRef: number;
+  stencilFuncMask: number;
+  stencilWriteMask: number;
+  stencilFail: THREE.StencilOp;
+  stencilZFail: THREE.StencilOp;
+  stencilZPass: THREE.StencilOp;
+  colorWrite: boolean;
+  side: THREE.Side;
+};
 
 function asMesh(obj: THREE.Object3D): THREE.Mesh | null {
   const mesh = obj as THREE.Mesh;
@@ -22,7 +38,17 @@ export function snapshotStencilMaterial(material: THREE.Material): void {
     data[DEPTH_SNAP] = {
       depthFunc: material.depthFunc,
       depthWrite: material.depthWrite,
-    } satisfies DepthSnap;
+      stencilWrite: material.stencilWrite,
+      stencilFunc: material.stencilFunc,
+      stencilRef: material.stencilRef,
+      stencilFuncMask: material.stencilFuncMask,
+      stencilWriteMask: material.stencilWriteMask,
+      stencilFail: material.stencilFail,
+      stencilZFail: material.stencilZFail,
+      stencilZPass: material.stencilZPass,
+      colorWrite: material.colorWrite,
+      side: material.side,
+    } satisfies StencilSnap;
   }
   data[STENCIL_MARK] = true;
 }
@@ -39,19 +65,30 @@ function clearStencilFlags(material: THREE.Material): void {
   if (!data[STENCIL_MARK]) {
     return;
   }
-  const snap = data[DEPTH_SNAP] as DepthSnap | undefined;
+  const snap = data[DEPTH_SNAP] as StencilSnap | undefined;
   if (snap) {
     material.depthFunc = snap.depthFunc;
     material.depthWrite = snap.depthWrite;
+    material.stencilWrite = snap.stencilWrite;
+    material.stencilFunc = snap.stencilFunc;
+    material.stencilRef = snap.stencilRef;
+    material.stencilFuncMask = snap.stencilFuncMask;
+    material.stencilWriteMask = snap.stencilWriteMask;
+    material.stencilFail = snap.stencilFail;
+    material.stencilZFail = snap.stencilZFail;
+    material.stencilZPass = snap.stencilZPass;
+    material.colorWrite = snap.colorWrite;
+    material.side = snap.side;
+  } else {
+    material.stencilWrite = false;
+    material.stencilFunc = THREE.AlwaysStencilFunc;
+    material.stencilRef = 0;
+    material.stencilFuncMask = 0xff;
+    material.stencilWriteMask = 0xff;
+    material.stencilFail = THREE.KeepStencilOp;
+    material.stencilZFail = THREE.KeepStencilOp;
+    material.stencilZPass = THREE.KeepStencilOp;
   }
-  material.stencilWrite = false;
-  material.stencilFunc = THREE.AlwaysStencilFunc;
-  material.stencilRef = 0;
-  material.stencilFuncMask = 0xff;
-  material.stencilWriteMask = 0xff;
-  material.stencilFail = THREE.KeepStencilOp;
-  material.stencilZFail = THREE.KeepStencilOp;
-  material.stencilZPass = THREE.KeepStencilOp;
   material.needsUpdate = true;
   delete data[DEPTH_SNAP];
   delete data[STENCIL_MARK];
@@ -66,7 +103,27 @@ function restoreMeshOrder(mesh: THREE.Mesh): void {
   delete data[ORDER_SNAP];
 }
 
+function disposeHelperMaterials(mesh: THREE.Mesh): void {
+  for (const slot of slotList(mesh)) {
+    slot.dispose();
+  }
+}
+
 export function resetMtoonxtStencil(gltf: GLTF): void {
+  const helpers: THREE.Object3D[] = [];
+  gltf.scene.traverse((obj) => {
+    if (obj.userData[STENCIL_HELPER] === true) {
+      helpers.push(obj);
+    }
+  });
+  for (const helper of helpers) {
+    helper.parent?.remove(helper);
+    const mesh = asMesh(helper);
+    if (mesh) {
+      disposeHelperMaterials(mesh);
+    }
+  }
+
   gltf.scene.traverse((obj) => {
     const mesh = asMesh(obj);
     if (!mesh) {
@@ -82,5 +139,10 @@ export function resetMtoonxtStencil(gltf: GLTF): void {
     for (const slot of mtoon) {
       clearStencilFlags(slot);
     }
+  }
+
+  const id = gltf.userData[STENCIL_INSTANCE_ID];
+  if (typeof id === 'number') {
+    releaseStencilRefBand(id);
   }
 }
