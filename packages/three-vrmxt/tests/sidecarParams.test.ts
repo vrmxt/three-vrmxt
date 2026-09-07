@@ -19,7 +19,21 @@ describe('sidecarEntryToFlat', () => {
     expect(flat.emissiveIntensity).toBe(1);
     expect(flat.outlineWidthMode).toBe('none');
     expect(flat.textureNames.matcap).toBe('mtoon_matcap_highlight');
+    expect(flat.uvAnimationScrollXSpeedFactor).toBe(0);
     expect(shouldGenerateOutline(flat)).toBe(false);
+  });
+
+  it('maps UV animation speeds', () => {
+    const flat = sidecarEntryToFlat({
+      mtoon: {
+        uvAnimationScrollXSpeedFactor: 0.5,
+        uvAnimationScrollYSpeedFactor: -0.25,
+        uvAnimationRotationSpeedFactor: 1.2,
+      },
+    });
+    expect(flat.uvAnimationScrollXSpeedFactor).toBe(0.5);
+    expect(flat.uvAnimationScrollYSpeedFactor).toBe(-0.25);
+    expect(flat.uvAnimationRotationSpeedFactor).toBe(1.2);
   });
 
   it('wants outline when screen mode and width', () => {

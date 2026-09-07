@@ -20,6 +20,9 @@ export type SidecarMtoonBlock = {
   outlineWidthFactor?: number;
   outlineColorFactor?: number[];
   outlineLightingMixFactor?: number;
+  uvAnimationScrollXSpeedFactor?: number;
+  uvAnimationScrollYSpeedFactor?: number;
+  uvAnimationRotationSpeedFactor?: number;
   textures?: Partial<
     Record<
       'base' | 'shade' | 'matcap' | 'normal' | 'emissive' | 'rim' | 'outlineWidth' | 'uvAnimMask',
@@ -65,6 +68,9 @@ export type FlatMtoonParams = {
   outlineWidthFactor: number;
   outlineColorFactor: [number, number, number];
   outlineLightingMixFactor: number;
+  uvAnimationScrollXSpeedFactor: number;
+  uvAnimationScrollYSpeedFactor: number;
+  uvAnimationRotationSpeedFactor: number;
   transparent: boolean;
   alphaTest: number;
   doubleSided: boolean;
@@ -92,6 +98,9 @@ export function sidecarEntryToFlat(entry: SidecarMaterial): FlatMtoonParams {
     outlineWidthFactor: m.outlineWidthFactor ?? 0,
     outlineColorFactor: rgb3(m.outlineColorFactor, [0, 0, 0]),
     outlineLightingMixFactor: m.outlineLightingMixFactor ?? 1,
+    uvAnimationScrollXSpeedFactor: m.uvAnimationScrollXSpeedFactor ?? 0,
+    uvAnimationScrollYSpeedFactor: m.uvAnimationScrollYSpeedFactor ?? 0,
+    uvAnimationRotationSpeedFactor: m.uvAnimationRotationSpeedFactor ?? 0,
     transparent: entry.alphaMode === 'BLEND',
     alphaTest: entry.alphaMode === 'MASK' ? 0.5 : 0,
     doubleSided: entry.doubleSided !== false,
