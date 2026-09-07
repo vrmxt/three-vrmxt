@@ -5,8 +5,10 @@ import { releaseStencilRefBand } from './stencilRefs.js';
 const DEPTH_SNAP = 'vrmxtDepthSnap';
 const STENCIL_MARK = 'vrmxtStencilApplied';
 const ORDER_SNAP = 'vrmxtRenderOrderSnap';
+const SLOT_SNAP = 'vrmxtSlotSnap';
 export const STENCIL_HELPER = 'vrmxtStencilHelper';
 export const STENCIL_INSTANCE_ID = 'vrmxtStencilInstanceId';
+export const STENCIL_HOLE = 'vrmxtStencilHole';
 
 type StencilSnap = {
   depthFunc: THREE.DepthModes;
@@ -58,6 +60,38 @@ export function snapshotMeshRenderOrder(mesh: THREE.Mesh): void {
   if (data[ORDER_SNAP] === undefined) {
     data[ORDER_SNAP] = mesh.renderOrder;
   }
+}
+
+export function snapshotMeshSlots(mesh: THREE.Mesh): void {
+  const data = mesh.userData as Record<string, unknown>;
+  if (data[SLOT_SNAP] === undefined) {
+    data[SLOT_SNAP] = Array.isArray(mesh.material) ? [...mesh.material] : mesh.material;
+  }
+}
+
+export function meshStencilSourceSlots(mesh: THREE.Mesh): THREE.Material[] {
+  const snap = (mesh.userData as Record<string, unknown>)[SLOT_SNAP];
+  if (Array.isArray(snap)) {
+    return snap;
+  }
+  if (snap) {
+    return [snap as THREE.Material];
+  }
+  return slotList(mesh);
+}
+
+function restoreMeshSlots(mesh: THREE.Mesh): void {
+  const data = mesh.userData as Record<string, unknown>;
+  const snap = data[SLOT_SNAP];
+  if (snap === undefined) {
+    return;
+  }
+  const holes = slotList(mesh).filter((slot) => slot.userData[STENCIL_HOLE] === true);
+  mesh.material = snap as THREE.Material | THREE.Material[];
+  for (const hole of holes) {
+    hole.dispose();
+  }
+  delete data[SLOT_SNAP];
 }
 
 function clearStencilFlags(material: THREE.Material): void {
@@ -130,6 +164,7 @@ export function resetMtoonxtStencil(gltf: GLTF): void {
       return;
     }
     restoreMeshOrder(mesh);
+    restoreMeshSlots(mesh);
     for (const slot of slotList(mesh)) {
       clearStencilFlags(slot);
     }

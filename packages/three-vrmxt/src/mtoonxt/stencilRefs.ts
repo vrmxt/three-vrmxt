@@ -36,11 +36,11 @@ export function resetStencilRefBands(): void {
 
 export function gpuStencilRef(localRef: number, gpuBase: number): number {
   if (gpuBase < STENCIL_REF_BAND_START || localRef < 1) {
-    return localRef;
+    return 0;
   }
   const next = localRef + gpuBase - 1;
-  if (next > STENCIL_REF_MAX) {
-    return localRef;
+  if (next > STENCIL_REF_MAX || SKIP.includes(next)) {
+    return 0;
   }
   return next;
 }

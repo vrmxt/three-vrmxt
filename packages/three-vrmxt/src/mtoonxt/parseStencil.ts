@@ -145,30 +145,42 @@ export function parseStencil(raw: unknown, materialCount: number): MtoonxtStenci
   };
 }
 
-export function parseRootStencils(json: GltfJson): MtoonxtStencil[] {
+export type ParseRootStencilsStats = {
+  stencils: MtoonxtStencil[];
+  skipped: number;
+};
+
+export function parseRootStencilsStats(json: GltfJson): ParseRootStencilsStats {
   const root = asRecord(asRecord(json.extensions)?.[EXT_MTOONXT]);
   if (!root || root.specVersion !== MTOONXT_SPEC_VERSION) {
-    return [];
+    return { stencils: [], skipped: 0 };
   }
   const raw = root.stencil;
   if (!Array.isArray(raw)) {
-    return [];
+    return { stencils: [], skipped: 0 };
   }
   const defs = json.materials ?? [];
   const materialCount = defs.length;
-  const result: MtoonxtStencil[] = [];
+  const stencils: MtoonxtStencil[] = [];
+  let skipped = 0;
   for (const entry of raw) {
     const parsed = parseStencil(entry, materialCount);
     if (!parsed) {
+      skipped += 1;
       continue;
     }
     const participants = [...parsed.writers, ...parsed.readers];
     if (participants.some((index) => !materialHasSiblingMtoon(defs[index]))) {
+      skipped += 1;
       continue;
     }
-    result.push(parsed);
+    stencils.push(parsed);
   }
-  return result;
+  return { stencils, skipped };
+}
+
+export function parseRootStencils(json: GltfJson): MtoonxtStencil[] {
+  return parseRootStencilsStats(json).stencils;
 }
 
 export function cloneJson<T>(value: T): T {

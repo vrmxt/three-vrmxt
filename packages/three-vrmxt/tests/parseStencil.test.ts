@@ -3,6 +3,7 @@ import {
   EXT_MTOONXT,
   MTOONXT_SPEC_VERSION,
   parseRootStencils,
+  parseRootStencilsStats,
   serializeRootStencils,
   type GltfJson,
   type MtoonxtStencil,
@@ -123,6 +124,7 @@ describe('parseRootStencils', () => {
       },
     };
     expect(parseRootStencils(json)).toEqual([]);
+    expect(parseRootStencilsStats(json).skipped).toBe(1);
   });
 
   it('skips an invalid row and keeps the next', () => {
@@ -142,6 +144,7 @@ describe('parseRootStencils', () => {
     expect(stencils).toHaveLength(1);
     expect(stencils[0].writers).toEqual([0]);
     expect(stencils[0].readers).toEqual([1]);
+    expect(parseRootStencilsStats(json).skipped).toBe(1);
   });
 });
 

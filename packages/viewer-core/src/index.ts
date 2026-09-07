@@ -24,6 +24,7 @@ import {
   sniffImageMime,
   tryAttach,
   disposeSpriteParticles,
+  STENCIL_HELPER,
   type GltfJson,
   type GltfNodeOption,
   type GltfTextureOption,
@@ -353,6 +354,9 @@ export function createVrmxtViewer(canvas: HTMLCanvasElement): VrmxtViewer {
       return;
     }
     root.traverse((obj) => {
+      if (obj.userData[STENCIL_HELPER] === true) {
+        return;
+      }
       const mesh = obj as THREE.Mesh;
       if (!mesh.isMesh) {
         return;
@@ -499,7 +503,16 @@ export function createVrmxtViewer(canvas: HTMLCanvasElement): VrmxtViewer {
     scene.add(root);
     current = root;
     currentGltf = gltf;
-    vrmUpdate = vrm ? (d) => vrm.update(d) : null;
+    vrmUpdate = (delta) => {
+      if (vrm) {
+        vrm.update(delta);
+        return;
+      }
+      const sidecar = gltf.userData.mtoonSidecar as { materials?: { update: (d: number) => void }[] } | undefined;
+      for (const mat of sidecar?.materials ?? []) {
+        mat.update(delta);
+      }
+    };
     const xt = gltf.userData.vrmxt as VrmxtAttachResult | undefined;
     spriteParticles = xt?.spriteParticles ?? null;
     applyModelShadowFlags(root);

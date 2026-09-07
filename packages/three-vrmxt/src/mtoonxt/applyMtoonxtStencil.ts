@@ -6,15 +6,18 @@ import {
   type StencilPass,
   type StencilPlan,
 } from './compileStencil.js';
-import { parseRootStencils, type GltfJson } from './parseStencil.js';
 import {
   STENCIL_HELPER,
+  STENCIL_HOLE,
   STENCIL_INSTANCE_ID,
   resetMtoonxtStencil,
   snapshotMeshRenderOrder,
+  snapshotMeshSlots,
+  meshStencilSourceSlots,
   snapshotStencilMaterial,
 } from './resetMtoonxtStencil.js';
-import { acquireStencilRefBand, gpuStencilRef } from './stencilRefs.js';
+import { STENCIL_REF_BAND_START, acquireStencilRefBand, gpuStencilRef } from './stencilRefs.js';
+import { parseRootStencilsStats, type GltfJson } from './parseStencil.js';
 
 export type ApplyStats = { applied: number; skipped: number };
 
@@ -50,10 +53,6 @@ const DEPTH_FUNCS: Record<string, THREE.DepthModes> = {
 type MaterialAssoc = { type?: string; index?: number };
 
 type Slot = { mesh: THREE.Mesh | null; material: THREE.Material };
-
-function isOutlineMaterial(material: THREE.Material): boolean {
-  return (material as THREE.Material & { isOutline?: boolean }).isOutline === true;
-}
 
 function resolveMaterialIndex(
   parser: GLTF['parser'],
@@ -211,18 +210,49 @@ function uniqueMeshes(slots: Slot[]): THREE.Mesh[] {
   return meshes;
 }
 
+function meshUsesOnlyWanted(mesh: THREE.Mesh, wanted: Set<THREE.Material>): boolean {
+  return meshStencilSourceSlots(mesh).every((mat) => wanted.has(mat));
+}
+
+function hideSlotsOnMesh(mesh: THREE.Mesh, wanted: Set<THREE.Material>): void {
+  snapshotMeshSlots(mesh);
+  const source = meshStencilSourceSlots(mesh);
+  const next = source.map((mat) => {
+    if (!wanted.has(mat)) {
+      return mat;
+    }
+    const hole = mat.clone();
+    hole.userData = { [STENCIL_HOLE]: true };
+    hole.visible = false;
+    hole.colorWrite = false;
+    hole.stencilWrite = false;
+    return hole;
+  });
+  mesh.material = Array.isArray(mesh.material) || source.length > 1 ? next : next[0];
+}
+
 function applyPassToSlots(slots: Slot[], pass: StencilPass, gpuRef: number, renderOrder: number): void {
-  const seen = new Set<THREE.Material>();
-  for (const slot of slots) {
-    if (seen.has(slot.material)) {
+  const wanted = new Set(slots.map((s) => s.material));
+  for (const mesh of uniqueMeshes(slots)) {
+    if (meshUsesOnlyWanted(mesh, wanted)) {
+      snapshotMeshRenderOrder(mesh);
+      mesh.renderOrder = renderOrder;
+      for (const mat of meshStencilSourceSlots(mesh)) {
+        applyGpuPass(mat, pass, gpuRef);
+      }
       continue;
     }
-    seen.add(slot.material);
-    applyGpuPass(slot.material, pass, gpuRef);
+    const materials = cloneSlotMaterials(mesh, wanted, pass, gpuRef);
+    cloneHelperMesh(mesh, materials, renderOrder);
+    hideSlotsOnMesh(mesh, wanted);
   }
-  for (const mesh of uniqueMeshes(slots)) {
-    snapshotMeshRenderOrder(mesh);
-    mesh.renderOrder = renderOrder;
+  const applied = new Set<THREE.Material>();
+  for (const slot of slots) {
+    if (slot.mesh || applied.has(slot.material)) {
+      continue;
+    }
+    applied.add(slot.material);
+    applyGpuPass(slot.material, pass, gpuRef);
   }
 }
 
@@ -232,7 +262,9 @@ function cloneHelperMesh(source: THREE.Mesh, materials: THREE.Material | THREE.M
     ? new THREE.SkinnedMesh(source.geometry, materials)
     : new THREE.Mesh(source.geometry, materials);
   if (skinned.isSkinnedMesh && (helper as THREE.SkinnedMesh).isSkinnedMesh) {
-    (helper as THREE.SkinnedMesh).bind(skinned.skeleton, skinned.bindMatrix);
+    const bound = helper as THREE.SkinnedMesh;
+    bound.bindMode = skinned.bindMode;
+    bound.bind(skinned.skeleton, skinned.bindMatrix);
   }
   if (source.morphTargetInfluences) {
     helper.morphTargetInfluences = source.morphTargetInfluences;
@@ -257,7 +289,7 @@ function cloneSlotMaterials(
   pass: StencilPass,
   gpuRef: number,
 ): THREE.Material | THREE.Material[] {
-  const slots = Array.isArray(source.material) ? source.material : [source.material];
+  const slots = meshStencilSourceSlots(source);
   const cloned = slots.map((mat) => {
     const copy = mat.clone();
     copy.userData = {};
@@ -268,7 +300,7 @@ function cloneSlotMaterials(
     }
     return copy;
   });
-  return Array.isArray(source.material) ? cloned : cloned[0];
+  return Array.isArray(source.material) || slots.length > 1 ? cloned : cloned[0];
 }
 
 const COVERAGE_PASS: StencilPass = {
@@ -289,7 +321,7 @@ function addCoverageHelpers(
     if (mesh.userData[STENCIL_HELPER] === true) {
       continue;
     }
-    const slots = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    const slots = meshStencilSourceSlots(mesh);
     const target = wanted ?? new Set(slots);
     if (wanted && !slots.some((m) => wanted.has(m))) {
       continue;
@@ -312,6 +344,9 @@ function applyPlan(
   }
 
   const gpuRef = gpuStencilRef(plan.localRef, gpuBase);
+  if (gpuRef < STENCIL_REF_BAND_START) {
+    return false;
+  }
   const writerOrder = plan.writersStampMask ? ORDER_MASK : ORDER_SUBJECT;
   const readerOrder = plan.readersStampMask ? ORDER_MASK : ORDER_SUBJECT;
   applyPassToSlots(writerSlots, plan.writerPrimary, gpuRef, writerOrder);
@@ -337,7 +372,7 @@ function applyPlan(
       if (mesh.userData[STENCIL_HELPER] === true) {
         continue;
       }
-      const slots = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      const slots = meshStencilSourceSlots(mesh);
       const nonWriter = slots.filter((mat) => {
         for (const [index, list] of byIndex) {
           if (list.some((s) => s.material === mat)) {
@@ -366,11 +401,11 @@ export async function applyMtoonxtStencil(gltf: GLTF): Promise<ApplyStats> {
 
   const json = gltf.parser.json as GltfJson;
   const defs = json.materials ?? [];
-  const parsed = parseRootStencils(json);
-  const plans = compileStencils(parsed, 1);
+  const parsed = parseRootStencilsStats(json);
+  const plans = compileStencils(parsed.stencils, 1);
   const stats: ApplyStats = {
     applied: 0,
-    skipped: Math.max(0, parsed.length - plans.length),
+    skipped: parsed.skipped,
   };
 
   if (plans.length === 0) {
@@ -389,6 +424,10 @@ export async function applyMtoonxtStencil(gltf: GLTF): Promise<ApplyStats> {
 
   const id = instanceId(gltf);
   const gpuBase = acquireStencilRefBand(id, plans.length);
+  if (gpuBase < STENCIL_REF_BAND_START) {
+    stats.skipped += plans.length;
+    return stats;
+  }
 
   for (const plan of plans) {
     if (applyPlan(plan, byIndex, gpuBase, allMeshes)) {

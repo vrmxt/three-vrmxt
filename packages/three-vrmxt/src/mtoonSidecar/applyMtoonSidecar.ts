@@ -164,6 +164,16 @@ export function applyMtoonSidecar(gltf: GLTF, sidecar: MtoonSidecarDocument): Ap
     else obj.material = replaced;
   });
 
-  gltf.userData.mtoonSidecar = { applied, skipped, missing };
+  const sidecarMtoon: MToonMaterial[] = [];
+  gltf.scene.traverse((obj) => {
+    if (!(obj instanceof THREE.Mesh)) return;
+    const list = Array.isArray(obj.material) ? obj.material : [obj.material];
+    for (const mat of list) {
+      if (mat instanceof MToonMaterial && !sidecarMtoon.includes(mat)) {
+        sidecarMtoon.push(mat);
+      }
+    }
+  });
+  gltf.userData.mtoonSidecar = { applied, skipped, missing, materials: sidecarMtoon };
   return { applied, skipped, missing };
 }

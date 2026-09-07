@@ -4,7 +4,7 @@ export { applyMtoonSidecar } from './mtoonSidecar/applyMtoonSidecar.js';
 export type { ApplyMtoonSidecarResult } from './mtoonSidecar/applyMtoonSidecar.js';
 export { sidecarEntryToFlat, shouldGenerateOutline, textureLookupKeys, MTOON_SIDECAR_KIND } from './mtoonSidecar/sidecarParams.js';
 export type { MtoonSidecarDocument, SidecarMaterial } from './mtoonSidecar/sidecarParams.js';
-export { resetMtoonxtStencil } from './mtoonxt/resetMtoonxtStencil.js';
+export { resetMtoonxtStencil, STENCIL_HELPER } from './mtoonxt/resetMtoonxtStencil.js';
 export {
   acquireStencilRefBand,
   gpuStencilRef,
@@ -17,10 +17,12 @@ export {
   ensureMtoonxtUsed,
   materialHasSiblingMtoon,
   parseRootStencils,
+  parseRootStencilsStats,
   serializeRootStencils,
   serializeStencil,
   type GltfJson,
   type MtoonxtStencil,
+  type ParseRootStencilsStats,
 } from './mtoonxt/parseStencil.js';
 export {
   CoverageMode,

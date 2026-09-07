@@ -43,7 +43,7 @@ describe('stencilRefs', () => {
     expect(acquireStencilRefBand(1, 20)).toBe(52);
   });
 
-  it('gpu ref without base keeps local', () => {
-    expect(gpuStencilRef(1, 0)).toBe(1);
+  it('gpu ref without band is invalid', () => {
+    expect(gpuStencilRef(1, 0)).toBe(0);
   });
 });
