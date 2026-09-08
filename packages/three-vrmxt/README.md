@@ -1,5 +1,9 @@
 # `@vrmxt/three-vrmxt`
 
+```bash
+npm install @vrmxt/three-vrmxt
+```
+
 Optional Extended VRM attach for apps that already use `@pixiv/three-vrm`.
 
 This package is **not** a pixiv/three-vrm fork and does not add hooks inside
@@ -25,7 +29,8 @@ v1 applies the root MToonXT stencil graph
 (`extensions.VRMXT_materials_mtoonxt.stencil[]`) and `VRMXT_sprite_particle`
 (instanced camera-facing quads). Nested material `stencil` / `outlineStencil` ops
 are not read. `apps/viewer` can edit the root graph and download a GLB. Face SDF
-is later. `stencil-cube.vrm` may have no root graph until you re-export.
+is later. The default sample `apps/viewer/public/stencil-cube.vrm` ships a root
+`stencil[]` graph (inner shapes write only inside cube faces, inside overlay).
 
 ## Non-humanoid GLB + MToon sidecar
 

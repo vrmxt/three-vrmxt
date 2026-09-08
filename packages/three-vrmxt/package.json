@@ -4,8 +4,26 @@
   "description": "Optional VRMXT / MToonXT GLTFLoader plugins beside @pixiv/three-vrm. Not a fork.",
   "type": "module",
   "license": "MIT",
+  "author": "miramocha",
   "sideEffects": false,
-  "files": ["dist", "src", "README.md"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vrmxt/three-vrmxt.git",
+    "directory": "packages/three-vrmxt"
+  },
+  "homepage": "https://github.com/vrmxt/three-vrmxt#readme",
+  "bugs": {
+    "url": "https://github.com/vrmxt/three-vrmxt/issues"
+  },
+  "keywords": [
+    "vrm",
+    "vrmxt",
+    "three",
+    "gltf",
+    "mtoon",
+    "stencil"
+  ],
+  "files": ["dist", "README.md", "LICENSE"],
   "exports": {
     ".": {
       "types": "./src/index.ts",
@@ -15,10 +33,23 @@
   },
   "main": "./src/index.ts",
   "types": "./src/index.ts",
+  "publishConfig": {
+    "access": "public",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js",
+        "default": "./dist/index.js"
+      }
+    }
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "pnpm test && pnpm run build"
   },
   "peerDependencies": {
     "@pixiv/three-vrm": "^3.4.0",
